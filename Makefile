@@ -10,13 +10,16 @@ install:
 	go install -ldflags "-X $(REPO)/internal/version.CommitSHA=$(COMMIT) -X $(REPO)/internal/version.Version=$(VERSION)" .
 
 build-dsc:
-	GOOS=darwin GOARCH=amd64 go build -ldflags "-X $(REPO)/cmd.Version=$(VERSION) -X $(REPO)/cmd.CommitSHA=$(COMMIT) -X $(REPO)/cmd.CompiledDirectory=github -X $(REPO)/cmd.CompiledStorage=vault -X $(REPO)/cmd.Org=dollarshaveclub" -o bin/dsc/psst-darwin .
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X $(REPO)/cmd.Version=$(VERSION) -X $(REPO)/cmd.CommitSHA=$(COMMIT) -X $(REPO)/cmd.CompiledDirectory=github -X $(REPO)/cmd.CompiledStorage=vault -X $(REPO)/cmd.Org=dollarshaveclub" -o bin/dsc/darwin/psst .
 
 build-all:
 	GOOS=darwin GOARCH=amd64 go build -ldflags "-X $(REPO)/cmd.Version=$(VERSION) -X $(REPO)/cmd.CommitSHA=$(COMMIT)" -o bin/psst-darwin .
 
 release:
 	cd releaser && go build && ./releaser --commit "$(COMMIT)" --release "${RELEASE}"
+
+test:
+	go test ./...
 
 clean:
 	rm -rf bin/*

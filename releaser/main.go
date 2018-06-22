@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -64,7 +65,7 @@ func init() {
 	pflag.StringVar(&fpath, "formula", "Formula/psst.rb", "path to formula within tap repo")
 	pflag.StringVar(&ftpath, "formula-template", "Formula/psst.rb.tmpl", "path to formula template within tap repo")
 	pflag.StringVar(&targetoslist, "macos-versions", "el_capitan,high_sierra,sierra", "Supported MacOS versions (comma-delimited)")
-	pflag.UintVar(&hbrev, "homebrew-rev", 1, "Homebrew revision (bump to force reinstall/rebuild)")
+	pflag.UintVar(&hbrev, "homebrew-rev", 0, "Homebrew revision (bump to force reinstall/rebuild)")
 	pflag.UintVar(&brbd, "bottle-rebuild", 1, "Bottle rebuild (bump to force bottle reinstall)")
 	pflag.BoolVar(&draft, "draft", false, "Draft release (unpublished)")
 	pflag.BoolVar(&prerelease, "prerelease", false, "Prerelease")
@@ -172,8 +173,10 @@ type formulaTemplateData struct {
 func (ftd *formulaTemplateData) populate(bdefs []bottleDefinition) {
 	ftd.Tag = rname
 	ftd.CommitSHA = commitsha
-	ftd.HomebrewRevision = hbrev
-	ftd.BaseDownloadURL = fmt.Sprintf("https://github.com/%v/%v/releases/download/%v/", repoOwner, repoName, rname)
+	if hbrev > 0 {
+		ftd.HomebrewRevision = hbrev
+	}
+	ftd.BaseDownloadURL = fmt.Sprintf("https://github.com/%v/%v/releases/download/%v", repoOwner, repoName, rname)
 	ftd.BottleRebuild = brbd
 	ftd.Bottled = true
 	ftd.BottleDefs = bdefs
@@ -231,7 +234,7 @@ const (
 	linuxBinName = "psst-linux-amd64"
 )
 
-var buildopts = []string{"-ldflags", "-X github.com/dollarshaveclub/psst/internal/version.CommitSHA=%v -X github.com/dollarshaveclub/psst/internal/version.Version=%v -X $(REPO)/cmd.CompiledDirectory=github -X $(REPO)/cmd.CompiledStorage=vault -X $(REPO)/cmd.Org=dollarshaveclub"}
+var buildopts = []string{"-ldflags", "-X github.com/dollarshaveclub/psst/cmd.CommitSHA=%v -X github.com/dollarshaveclub/psst/cmd.Version=%v -X github.com/dollarshaveclub/psst/cmd.CompiledDirectory=github -X github.com/dollarshaveclub/psst/cmd.CompiledStorage=vault -X github.com/dollarshaveclub/psst/cmd.Org=dollarshaveclub"}
 
 func buildBins() error {
 	if err := os.MkdirAll("bins", os.ModeDir|0755); err != nil {
@@ -295,7 +298,7 @@ func cpifneeded(src, dest string) error {
 	return nil
 }
 
-var bottleNameTmpl = template.Must(template.New("bn").Parse("psst-{{ .Release }}_{{ .HomebrewRevision }}.{{ .OS }}.bottle.{{ .BottleRebuild }}.tar.gz"))
+var bottleNameTmpl = template.Must(template.New("bn").Parse("psst-{{ .Release }}{{ if .HomebrewRevision }}_{{ .HomebrewRevision }}{{ end }}.{{ .OS }}.bottle.{{ .BottleRebuild }}.tar.gz"))
 
 // createBottle synthetically creates a bottle tarball returning the bottle definitions, local bottle filenames and error if any
 func createBottle() ([]bottleDefinition, []string, error) {
@@ -327,15 +330,18 @@ func createBottle() ([]bottleDefinition, []string, error) {
 		return nil, nil, errors.Wrap(err, "error reading install receipt template")
 	}
 	tmpl, err := template.New("instrcpt").Parse(string(ir))
+	semVer := regexp.MustCompile("([0-9.]+)").FindString(rname)
 	d := struct {
 		Release          string
 		OS               string
 		HomebrewRevision uint
 		BottleRebuild    uint
 	}{
-		Release:          rname,
-		HomebrewRevision: hbrev,
-		BottleRebuild:    brbd,
+		Release:       semVer,
+		BottleRebuild: brbd,
+	}
+	if hbrev > 0 {
+		d.HomebrewRevision = hbrev
 	}
 	buf := bytes.NewBuffer([]byte{})
 	if err := tmpl.Execute(buf, &d); err != nil {

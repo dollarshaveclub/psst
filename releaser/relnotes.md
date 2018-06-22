@@ -1,3 +1,5 @@
-# Initial Release
+# Fixes build for homebrew
 
-- Adds command for sharing secrets using GitHub as a user directory and Vault as a secure storage backend.
+- Fixes build to include compiled in options.
+- Fixes releaser so that it properly packages binaries for HomeBrew.
+- Fixes HomeBrew tap templates so that bottles begin to work.

@@ -39,6 +39,9 @@ var rootCmd = &cobra.Command{
 
 		switch directoryBackend {
 		case "github":
+			if os.Getenv("GITHUB_TOKEN") == "" {
+				errorAndExit(errors.New("You must set the GITHUB_TOKEN environment variable"), 1)
+			}
 			dirState, err = directory.NewGitHub(Org)
 			if err != nil {
 				errorAndExit(fmt.Errorf("unable to get directory client: %+v", err), 1)
@@ -49,6 +52,9 @@ var rootCmd = &cobra.Command{
 
 		switch storageBackend {
 		case "vault":
+			if os.Getenv("VAULT_TOKEN") == "" {
+				errorAndExit(errors.New("You must set the VAULT_TOKEN environment variable with a valid Vault token"), 1)
+			}
 			storageClient, err = storage.NewVault()
 			if err != nil {
 				errorAndExit(fmt.Errorf("unable to get storage client: %+v", err), 1)

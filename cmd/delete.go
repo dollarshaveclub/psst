@@ -8,6 +8,8 @@ import (
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
+
+	deleteCmd.Flags().StringVarP(&team, "team", "t", "", "the team currently owning the secret")
 }
 
 var deleteCmd = &cobra.Command{
@@ -24,7 +26,16 @@ var deleteCmd = &cobra.Command{
 		// cobra.ExactArgs(1) makes sure we have a single argument
 		name := args[0]
 
-		path := storageClient.SecretPath(login, name)
+		entity := login
+		if team != "" {
+			var ok bool
+			entity, ok = dirState.IsTeam(team)
+			if !ok {
+				errorAndExit(fmt.Errorf("unable to find team '%s'", team), 1)
+			}
+		}
+
+		path := storageClient.SecretPath(entity, name)
 		if err := storageClient.Delete(path); err != nil {
 			errorAndExit(err, 1)
 		}

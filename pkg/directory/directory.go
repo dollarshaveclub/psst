@@ -17,16 +17,18 @@ type Backend interface {
 	GetMembers() []Member
 	GetTeams() []Team
 	GetTeamMembers(string) []string
-	IsMember(string) bool
-	IsTeam(string) bool
+	GetActiveMemberTeams() []string
+	IsMember(string) (string, bool)
+	IsTeam(string) (string, bool)
 	Whoami() (string, error)
 }
 
 // Info is the basic information required by all directory implementations
 type Info struct {
-	Org     string
-	Members []Member
-	Teams   []Team
+	Org               string
+	ActiveMemberTeams []string
+	Members           []Member
+	Teams             []Team
 }
 
 // Member contains basic info about a member

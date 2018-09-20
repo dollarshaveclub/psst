@@ -11,7 +11,7 @@ import (
 func TestGetMatches(t *testing.T) {
 	testGHState := &GH{}
 	testGHState.Members = []Member{Member{Login: "test1", Name: "Test 1"}, Member{Login: "test2", Name: ""}}
-	testGHState.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
+	testGHState.Info.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
 
 	cases := map[string]struct {
 		State    *GH
@@ -88,7 +88,7 @@ func TestGetMatches(t *testing.T) {
 func TestIsMember(t *testing.T) {
 	testGHState := &GH{}
 	testGHState.Members = []Member{Member{Login: "test1", Name: "Test 1"}, Member{Login: "test2", Name: ""}}
-	testGHState.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
+	testGHState.Info.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
 
 	cases := map[string]struct {
 		State    *GH
@@ -109,7 +109,7 @@ func TestIsMember(t *testing.T) {
 
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := c.State.IsMember(c.Lookup)
+			_, got := c.State.IsMember(c.Lookup)
 			if got != c.Expected {
 				t.Errorf("Name: %s, got: %v, expected: %v", name, got, c.Expected)
 			}
@@ -120,7 +120,7 @@ func TestIsMember(t *testing.T) {
 func TestIsTeam(t *testing.T) {
 	testGHState := &GH{}
 	testGHState.Members = []Member{Member{Login: "test1", Name: "Test 1"}, Member{Login: "test2", Name: ""}}
-	testGHState.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
+	testGHState.Info.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
 
 	cases := map[string]struct {
 		State    *GH
@@ -141,7 +141,7 @@ func TestIsTeam(t *testing.T) {
 
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := c.State.IsTeam(c.Lookup)
+			_, got := c.State.IsTeam(c.Lookup)
 			if got != c.Expected {
 				t.Errorf("Name: %s, got: %v, expected: %v", name, got, c.Expected)
 			}
@@ -152,7 +152,7 @@ func TestIsTeam(t *testing.T) {
 func TestGetTeamMembers(t *testing.T) {
 	testGHState := &GH{}
 	testGHState.Members = []Member{Member{Login: "test1", Name: "Test 1"}, Member{Login: "test2", Name: ""}}
-	testGHState.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
+	testGHState.Info.Teams = []Team{Team{Name: "team1", Members: []string{"test1", "test2"}}, Team{Name: "team2", Members: []string{}}}
 
 	cases := map[string]struct {
 		State    *GH

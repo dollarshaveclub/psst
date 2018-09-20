@@ -1,5 +1,5 @@
-# Fixes build for homebrew
+# Version 2: Moves team secrets to dedicated spaces
 
-- Fixes build to include compiled in options.
-- Fixes releaser so that it properly packages binaries for HomeBrew.
-- Fixes HomeBrew tap templates so that bottles begin to work.
+- Updates team secrets to now use dedicates spaces instead of providing secrets to each team member individually. This allows secrets to persist if all members of a team rotate out.
+- Updates Vault policy generation to allow for generating access to team spaces.
+- Allows for case-insensitive lookups without breaking backwards compatibility for previously created secrets.

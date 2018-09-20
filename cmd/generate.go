@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,19 @@ var generateCmd = &cobra.Command{
 	Short: "Generate polices missing for new users in GitHub",
 	Long:  `Generate polices missing for new users in GitHub`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := storageClient.GeneratePoliciesAndRoles(directoryBackend, roleDir, policyDir, allTeam, dirState.GetMembers()); err != nil {
+		entities := []string{}
+		for _, m := range dirState.GetMembers() {
+			entities = append(entities, m.Login)
+		}
+		if err := storageClient.GeneratePoliciesAndRoles(directoryBackend, path.Join(roleDir, "users"), policyDir, allTeam, entities); err != nil {
+			errorAndExit(fmt.Errorf("unable to generate policies and roles: %v", err), 1)
+		}
+
+		entities = []string{}
+		for _, t := range dirState.GetTeams() {
+			entities = append(entities, t.Name)
+		}
+		if err := storageClient.GeneratePoliciesAndRoles(directoryBackend, path.Join(roleDir, "teams"), policyDir, allTeam, entities); err != nil {
 			errorAndExit(fmt.Errorf("unable to generate policies and roles: %v", err), 1)
 		}
 	},

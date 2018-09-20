@@ -2,8 +2,8 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.10.3
-    working_directory: /go/src/github.com/dollarshaveclub/psst
+      - image: circleci/golang:1.11.0
+    working_directory: ~/psst
     steps:
       - checkout
       - run:

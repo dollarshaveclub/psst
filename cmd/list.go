@@ -20,18 +20,32 @@ var listCmd = &cobra.Command{
 			errorAndExit(fmt.Errorf("unable to get login name: %+v", err), 1)
 		}
 
-		secret, err := storageClient.List(login)
-		if err != nil {
+		if err := listSecrets(login); err != nil {
 			errorAndExit(err, 1)
 		}
 
-		if len(secret) > 0 {
-			fmt.Println("Secrets:")
-			for _, s := range secret {
-				fmt.Printf("  %v\n", s)
+		for _, team := range dirState.GetActiveMemberTeams() {
+			if err := listSecrets(team); err != nil {
+				errorAndExit(err, 1)
 			}
-		} else {
-			fmt.Println("No secrets found")
 		}
 	},
+}
+
+func listSecrets(entity string) error {
+	secret, err := storageClient.List(entity)
+	if err != nil {
+		return err
+	}
+
+	if secret != nil && len(secret) > 0 {
+		fmt.Println(entity)
+		fmt.Println("=======")
+		for _, s := range secret {
+			fmt.Printf("  %v\n", s)
+		}
+		fmt.Println()
+	}
+
+	return nil
 }

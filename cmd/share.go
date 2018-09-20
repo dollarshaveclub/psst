@@ -53,19 +53,19 @@ func targets(dirState directory.Backend, members, teams []string) (map[string]st
 	targets := make(map[string]struct{})
 
 	for _, m := range members {
-		if !dirState.IsMember(m) {
-			return nil, fmt.Errorf("member %s does not exist in directory", m)
+		name, ok := dirState.IsMember(m)
+		if !ok {
+			return nil, fmt.Errorf("member '%s' does not exist in directory", m)
 		}
-		targets[m] = struct{}{}
+		targets[name] = struct{}{}
 	}
 
 	for _, t := range teams {
-		if !dirState.IsTeam(t) {
-			return nil, fmt.Errorf("team %s does not exist in directory", t)
+		name, ok := dirState.IsTeam(t)
+		if !ok {
+			return nil, fmt.Errorf("team '%s' does not exist in directory", t)
 		}
-		for _, m := range dirState.GetTeamMembers(t) {
-			targets[m] = struct{}{}
-		}
+		targets[name] = struct{}{}
 	}
 	return targets, nil
 }

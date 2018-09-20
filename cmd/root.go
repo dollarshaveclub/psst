@@ -22,18 +22,23 @@ var (
 
 	dirState      directory.Backend
 	storageClient storage.Backend
+
+	updateCache bool
+	debug       bool
 )
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&Org, "org", Org, "organization for the directory")
 	rootCmd.PersistentFlags().StringVar(&directoryBackend, "directory-backend", CompiledDirectory, "directory to use to find members and teams (e.g. GitHub)")
 	rootCmd.PersistentFlags().StringVar(&storageBackend, "storage-backend", CompiledStorage, "storage backend to use for secrets (e.g. Vault)")
+	rootCmd.PersistentFlags().BoolVar(&updateCache, "update-cache", false, "forces an update of the directory cache")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "produce more debugging output")
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "psst",
 	Short: "Psst is a tool for securely sharing secrets inside of your organization",
-	Long:  `Psst uses GitHub and Hashicorp to share secrets with one or more users`,
+	Long:  `Psst is a tool for securely sharing secrets inside of your organization`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		var err error
 
@@ -42,7 +47,10 @@ var rootCmd = &cobra.Command{
 			if os.Getenv("GITHUB_TOKEN") == "" {
 				errorAndExit(errors.New("You must set the GITHUB_TOKEN environment variable"), 1)
 			}
-			dirState, err = directory.NewGitHub(Org)
+
+			fmt.Fprintf(os.Stderr, "Checking members and teams cache...\n\n")
+
+			dirState, err = directory.NewGitHub(Org, updateCache)
 			if err != nil {
 				errorAndExit(fmt.Errorf("unable to get directory client: %+v", err), 1)
 			}
@@ -52,9 +60,6 @@ var rootCmd = &cobra.Command{
 
 		switch storageBackend {
 		case "vault":
-			if os.Getenv("VAULT_TOKEN") == "" {
-				errorAndExit(errors.New("You must set the VAULT_TOKEN environment variable with a valid Vault token"), 1)
-			}
 			storageClient, err = storage.NewVault()
 			if err != nil {
 				errorAndExit(fmt.Errorf("unable to get storage client: %+v", err), 1)
@@ -74,6 +79,10 @@ func Execute() {
 }
 
 func errorAndExit(err error, code int) {
-	fmt.Fprintf(os.Stderr, "%+v\n", err)
+	format := "%v\n"
+	if debug {
+		format = "%+v\n"
+	}
+	fmt.Fprintf(os.Stderr, format, err)
 	os.Exit(code)
 }

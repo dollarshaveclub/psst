@@ -4,7 +4,7 @@ VERSION=$(shell git tag -l --points-at HEAD)
 COMMIT=$(shell git rev-parse HEAD)
 REPO="github.com/dollarshaveclub/psst"
 
-all: clean bin/minibox
+all: clean bin/psst
 
 install:
 	go install -ldflags "-X $(REPO)/internal/version.CommitSHA=$(COMMIT) -X $(REPO)/internal/version.Version=$(VERSION)" .

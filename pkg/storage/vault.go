@@ -10,7 +10,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/dollarshaveclub/psst/pkg/directory"
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
 )
@@ -25,7 +24,8 @@ const (
 // PolicyTemplates are used with Vault to give users permissions
 type PolicyTemplates struct {
 	GeneralPolicyTemplate string
-	PolicyTemplate        string
+	MemberPolicyTemplate  string
+	TeamPolicyTemplate    string
 }
 
 type ghUserPolicy struct {
@@ -43,9 +43,14 @@ path "{{.Path}}/*" {
 	capabilities = ["create", "update"]
 }
 `,
-			PolicyTemplate: `# Allows a user to read secrets from personal drop keyspace
+			MemberPolicyTemplate: `# Allows a user to read secrets from personal drop keyspace
 path "{{.Path}}/*" {
 	capabilities = ["read", "list", "delete"]
+}
+`,
+			TeamPolicyTemplate: `# Allows a team to read and write secrets to and from drop keyspace
+path "{{.Path}}/*" {
+	capabilities = ["create", "update", "read", "list", "delete"]
 }
 `,
 		},
@@ -62,6 +67,16 @@ func NewVault() (*VaultStore, error) {
 	client, err := api.NewClient(api.DefaultConfig())
 	if err != nil {
 		return &VaultStore{}, fmt.Errorf("unable to get Vault client: %+v", err)
+	}
+
+	if os.Getenv("VAULT_TOKEN") == "" {
+		tokenPath := path.Join(os.Getenv("HOME"), ".vault-token")
+		token, err := ioutil.ReadFile(tokenPath)
+		if err != nil {
+			return &VaultStore{}, fmt.Errorf("please login to vault and try again")
+		}
+		client.SetToken(string(token))
+
 	}
 	return &VaultStore{client}, nil
 }
@@ -130,8 +145,8 @@ func (v *VaultStore) Delete(path string) error {
 	return nil
 }
 
-// GeneratePoliciesAndRoles will generate a set of policies for a given directory of members
-func (v *VaultStore) GeneratePoliciesAndRoles(directoryBackend, roleDir, policyDir, defaultTeam string, members []directory.Member) error {
+// GeneratePoliciesAndRoles will generate a set of policies for a given directory of entities
+func (v *VaultStore) GeneratePoliciesAndRoles(directoryBackend, roleDir, policyDir, defaultTeam string, entities []string) error {
 	policies, ok := policies[directoryBackend]
 	if !ok {
 		return fmt.Errorf("unknown directory backend %s", directoryBackend)
@@ -144,36 +159,50 @@ func (v *VaultStore) GeneratePoliciesAndRoles(directoryBackend, roleDir, policyD
 	if err := gt.Execute(buf, s); err != nil {
 		return fmt.Errorf("unable to execute template for general policy: %+v", err)
 	}
+
+	_, err := os.Stat(roleDir)
+	if err != nil && os.IsNotExist(err) {
+		if err := os.MkdirAll(roleDir, 0700); err != nil {
+			return fmt.Errorf("unable to create role directory: %+v", err)
+		}
+	}
+
+	_, err = os.Stat(policyDir)
+	if err != nil && os.IsNotExist(err) {
+		if err := os.MkdirAll(policyDir, 0700); err != nil {
+			return fmt.Errorf("unable to create policy directory: %+v", err)
+		}
+	}
 	p := path.Join(policyDir, fmt.Sprintf("%s.hcl", filePrefix))
 	if err := ioutil.WriteFile(p, buf.Bytes(), filePerms); err != nil {
 		return fmt.Errorf("unable to write general psst policy file: %+v", err)
 	}
 
+	t := template.Must(template.New("policy").Parse(policies.MemberPolicyTemplate))
+
 	// Adds default role for the "all" team in GH
 	teamRoles := roleDir
-	if path.Base(roleDir) == "users" {
-		teamRoles = path.Join(path.Dir(roleDir), "teams")
-	}
-	if err := checkRole(defaultTeam, filePrefix, teamRoles); err != nil {
-		return fmt.Errorf("unable to write all team role: %v", err)
-	}
-
-	t := template.Must(template.New("policy").Parse(policies.PolicyTemplate))
-
-	for _, m := range members {
-		buf.Reset()
-		s = space{Path: getSecretPathPrefix(m.Login)}
-		if err := t.Execute(buf, s); err != nil {
-			return fmt.Errorf("unable to execute template for user %s: %+v", m.Login, err)
+	if path.Base(roleDir) == "teams" {
+		if err := checkRole(defaultTeam, filePrefix, teamRoles); err != nil {
+			return fmt.Errorf(`unable to write "all" team role: %v`, err)
 		}
-		roleName := fmt.Sprintf("%s-%s", filePrefix, m.Login)
+		t = template.Must(template.New("policy").Parse(policies.TeamPolicyTemplate))
+	}
+
+	for _, e := range entities {
+		buf.Reset()
+		s = space{Path: getSecretPathPrefix(e)}
+		if err := t.Execute(buf, s); err != nil {
+			return fmt.Errorf("unable to execute template for user %s: %+v", e, err)
+		}
+		roleName := fmt.Sprintf("%s-%s", filePrefix, e)
 		p = path.Join(policyDir, fmt.Sprintf("%s.hcl", roleName))
 		if err := ioutil.WriteFile(p, buf.Bytes(), filePerms); err != nil {
-			return fmt.Errorf("unable to write policy file for user %s: %+v", m.Login, err)
+			return fmt.Errorf("unable to write policy file for user %s: %+v", e, err)
 		}
 
-		if err := checkRole(m.Login, roleName, roleDir); err != nil {
-			return fmt.Errorf("Unable to setup role for %s: %v", m.Login, err)
+		if err := checkRole(e, roleName, roleDir); err != nil {
+			return fmt.Errorf("Unable to setup role for %s: %v", e, err)
 		}
 	}
 	return nil

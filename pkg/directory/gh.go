@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,7 +38,7 @@ type GH struct {
 }
 
 // NewGitHub returns an initialized GitHub client to the caller and stored GH members and teams
-func NewGitHub(org string) (*GH, error) {
+func NewGitHub(org string, updateCache bool) (*GH, error) {
 	ctx := context.Background()
 	client := &GH{}
 
@@ -54,28 +54,34 @@ func NewGitHub(org string) (*GH, error) {
 	client.UsersService = client.Client.Users
 	client.Org = org
 
-	if err := client.getMembersAndTeams(); err != nil {
+	if err := client.getMembersAndTeams(updateCache); err != nil {
 		return client, err
 	}
 	return client, nil
 }
 
-func (g *GH) getMembersAndTeams() error {
-	update := false
+func (g *GH) getMembersAndTeams(updateCache bool) error {
+	update := updateCache
 
 	if err := os.MkdirAll(cacheDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "unable to create cache directory")
 	}
 
-	membersFile := path.Join(cacheDir, "members")
+	membersFile := filepath.Join(cacheDir, "members")
 	mfInfo, err := os.Stat(membersFile)
 	if err != nil || time.Since(mfInfo.ModTime()).Minutes() > cacheTTL {
 		update = true
 	}
 
-	teamsFile := path.Join(cacheDir, "teams")
+	teamsFile := filepath.Join(cacheDir, "teams")
 	tfInfo, err := os.Stat(teamsFile)
 	if err != nil || time.Since(tfInfo.ModTime()).Minutes() > cacheTTL {
+		update = true
+	}
+
+	activeMembershipsFile := filepath.Join(cacheDir, "active-memberships")
+	amfInfo, err := os.Stat(activeMembershipsFile)
+	if err != nil || time.Since(amfInfo.ModTime()).Minutes() > cacheTTL {
 		update = true
 	}
 
@@ -102,15 +108,21 @@ func (g *GH) getMembersAndTeams() error {
 		if err := saveCache(membersFile, g.Members); err != nil {
 			return errors.Wrap(err, "unable to save members file")
 		}
-		if err := saveCache(teamsFile, g.Teams); err != nil {
+		if err := saveCache(teamsFile, g.Info.Teams); err != nil {
 			return errors.Wrap(err, "unable to save teams file")
+		}
+		if err := saveCache(activeMembershipsFile, g.ActiveMemberTeams); err != nil {
+			return errors.Wrap(err, "unable to save active memberships file")
 		}
 	} else {
 		if err := getCached(membersFile, &g.Members); err != nil {
 			return errors.Wrap(err, "unable to get cached members information")
 		}
-		if err := getCached(teamsFile, &g.Teams); err != nil {
+		if err := getCached(teamsFile, &g.Info.Teams); err != nil {
 			return errors.Wrap(err, "unable to get cached team information")
+		}
+		if err := getCached(activeMembershipsFile, &g.ActiveMemberTeams); err != nil {
+			return errors.Wrap(err, "unable to get cached active memberships information")
 		}
 	}
 
@@ -159,6 +171,11 @@ func (g *GH) getMembers() error {
 	in := make(chan string)
 	out := make(chan Member)
 
+	activeMember, err := g.Whoami()
+	if err != nil {
+		return err
+	}
+
 	// This process can be slow so we speed it up by doing multiple lookups at a time.
 	// Was implemented because it took about 45 seconds to get all members and teams and this
 	// took it down to about 3 seconds.
@@ -169,6 +186,16 @@ func (g *GH) getMembers() error {
 				u, _, err := g.Client.Users.Get(context.Background(), login)
 				if err != nil {
 					return errors.Wrap(err, fmt.Sprintf("error looking up member %s", login))
+				}
+
+				// Get memberships for the local user, we don't care about everybody's membership
+				if login == activeMember {
+					teams := []string{}
+					teams, err = g.getTeamMemberships(login)
+					if err != nil {
+						return err
+					}
+					g.ActiveMemberTeams = teams
 				}
 				out <- Member{Login: login, Name: u.GetName()}
 			}
@@ -248,7 +275,7 @@ func (g *GH) getTeams() error {
 	for nextPage > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
 		defer cancel()
-		ts, resp, err := g.Client.Organizations.ListTeams(ctx, g.Org, &github.ListOptions{Page: nextPage})
+		ts, resp, err := g.Client.Teams.ListTeams(ctx, g.Org, &github.ListOptions{Page: nextPage})
 		if err != nil {
 			return errors.Wrap(err, "unable to get teams from GitHub")
 		}
@@ -265,7 +292,7 @@ func (g *GH) getTeams() error {
 	}
 	close(out)
 	ByTeams(sortTeamNames).Sort(teams)
-	g.Teams = teams
+	g.Info.Teams = teams
 
 	return nil
 }
@@ -275,14 +302,13 @@ func (g *GH) getTeamMembers(id int64) ([]string, error) {
 	nextPage := 1
 
 	for nextPage > 0 {
-		users, resp, err := g.Client.Organizations.ListTeamMembers(context.Background(), id, &github.OrganizationListTeamMembersOptions{ListOptions: github.ListOptions{Page: nextPage}})
+		users, resp, err := g.Client.Teams.ListTeamMembers(context.Background(), id, &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{Page: nextPage}})
 		if err != nil {
 			return members, err
 		}
 		for _, u := range users {
 			members = append(members, u.GetLogin())
 		}
-
 		nextPage = resp.NextPage
 	}
 
@@ -296,49 +322,48 @@ func (g *GH) GetMatches(lookup string) Matches {
 
 	if lookup == "*" {
 		matches.Members = g.Members
-		matches.Teams = g.Teams
+		matches.Teams = g.Info.Teams
 		return matches
 	}
 
 	for _, m := range g.Members {
 		if strings.Contains(strings.ToLower(m.Login), strings.ToLower(lookup)) || strings.Contains(strings.ToLower(m.Name), strings.ToLower(lookup)) {
-			matches.Members = append(matches.Members, Member{Login: m.Login, Name: m.Name})
+			matches.Members = append(matches.Members, m)
 		}
 	}
 
-	for _, t := range g.Teams {
+	for _, t := range g.Info.Teams {
 		if strings.Contains(strings.ToLower(t.Name), strings.ToLower(lookup)) {
-			matches.Teams = append(matches.Teams, Team{Name: t.Name, Members: t.Members})
+			matches.Teams = append(matches.Teams, t)
 		}
 	}
-
 	return matches
 }
 
 // IsMember will check an organization for a specific user
-func (g *GH) IsMember(lookup string) bool {
+func (g *GH) IsMember(lookup string) (string, bool) {
 	for _, u := range g.Members {
 		if strings.ToLower(lookup) == strings.ToLower(u.Login) {
-			return true
+			return u.Login, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // IsTeam will check an organization for a specific team
-func (g *GH) IsTeam(lookup string) bool {
-	for _, t := range g.Teams {
+func (g *GH) IsTeam(lookup string) (string, bool) {
+	for _, t := range g.Info.Teams {
 		if strings.ToLower(lookup) == strings.ToLower(t.Name) {
-			return true
+			return t.Name, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // GetTeamMembers returns a list of members for the provided team name
 func (g *GH) GetTeamMembers(name string) []string {
-	for _, t := range g.Teams {
-		if strings.ToLower(name) == strings.ToLower(t.Name) {
+	for _, t := range g.Info.Teams {
+		if name == t.Name {
 			return t.Members
 		}
 	}
@@ -361,5 +386,35 @@ func (g *GH) GetMembers() []Member {
 
 // GetTeams returns the list of teams
 func (g *GH) GetTeams() []Team {
-	return g.Teams
+	return g.Info.Teams
+}
+
+// GetActiveMemberTeams returns a slice of team names
+func (g *GH) GetActiveMemberTeams() []string {
+	return g.ActiveMemberTeams
+}
+
+func (g *GH) getTeamMemberships(member string) ([]string, error) {
+	teamNames := []string{}
+
+	opts := &github.ListOptions{Page: 1}
+	for {
+		teams, resp, err := g.Client.Teams.ListUserTeams(context.Background(), &github.ListOptions{})
+		if err != nil {
+			return []string{}, err
+		}
+
+		for _, t := range teams {
+			org := t.GetOrganization()
+			if org != nil && org.GetLogin() == g.Org {
+				teamNames = append(teamNames, *t.Name)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return teamNames, nil
 }

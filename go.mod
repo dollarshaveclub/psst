@@ -1,5 +1,7 @@
 module github.com/dollarshaveclub/psst
 
+go 1.18
+
 require (
 	cloud.google.com/go v0.23.0
 	github.com/Jeffail/gabs v1.1.0
@@ -28,7 +30,7 @@ require (
 	github.com/hashicorp/go-multierror v0.0.0-20171204182908-b7773ae21874
 	github.com/hashicorp/go-plugin v0.0.0-20180331002553-e8d22c780116
 	github.com/hashicorp/go-retryablehttp v0.0.0-20180531211321-3b087ef2d313
-	github.com/hashicorp/go-rootcerts v0.0.0-20160503143440-6bb64b370b90
+	github.com/hashicorp/go-rootcerts v1.0.2
 	github.com/hashicorp/go-sockaddr v0.0.0-20180320115054-6d291a969b86
 	github.com/hashicorp/go-uuid v0.0.0-20180228145832-27454136f036
 	github.com/hashicorp/go-version v0.0.0-20180322230233-23480c066577
@@ -42,7 +44,7 @@ require (
 	github.com/lib/pq v0.0.0-20180523175426-90697d60dd84
 	github.com/mholt/archiver v2.0.0+incompatible
 	github.com/mitchellh/copystructure v0.0.0-20170525013902-d23ffcb85de3
-	github.com/mitchellh/go-homedir v0.0.0-20180523094522-3864e76763d9
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-testing-interface v0.0.0-20171004221916-a61a99592b77
 	github.com/mitchellh/mapstructure v0.0.0-20180511142126-bb74f1db0675
 	github.com/mitchellh/reflectwalk v0.0.0-20170726202117-63d60e9d0dbc

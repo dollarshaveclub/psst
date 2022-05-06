@@ -1,2 +1,4 @@
 bin/
 psst
+.DS_Store
+.vscode/
